@@ -156,6 +156,15 @@
         #load-state-btn { background-color: var(--node-bg); }
         #load-state-btn:hover { background-color: var(--border-color); }
         .options-label-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; }
+        .version-text {
+            font-size: 0.7rem;
+            font-style: italic;
+            color: var(--text-dark);
+            text-align: right;
+            width: 100%;
+            padding-right: 5px;
+            margin-top: 5px;
+        }
 
         /* Custom Scrollbars */
         ::-webkit-scrollbar {
@@ -208,6 +217,7 @@
              <div class="options-menu-item">
                  <button id="clear-all-btn">Clear All Nodes</button>
             </div>
+            <p class="version-text">v0.1.1</p>
         </div>
         <button id="options-btn" title="Options">&#x2699;</button> <!-- Gear Icon -->
         <input type="file" id="load-state-input" style="display: none;" accept=".json">
@@ -243,7 +253,7 @@
         let settings = { snapToGrid: true };
         
         // --- Wordlist for "Add Spaces" Node ---
-        const COMMON_WORDS = ["the", "be", "to", "of", "and", "in", "that", "have", "it", "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your", "good", "some", "could", "them", "see", "other", "than", "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "new", "want", "because", "any", "these", "give", "day", "most", "us"];
+        const COMMON_WORDS = ["the", "of", "and", "to", "in", "is", "you", "that", "it", "he", "was", "for", "on", "are", "as", "with", "his", "they", "at", "be", "this", "have", "from", "or", "one", "had", "by", "word", "but", "not", "what", "all", "were", "we", "when", "your", "can", "said", "there", "use", "an", "each", "which", "she", "do", "how", "their", "if", "will", "up", "other", "about", "out", "many", "then", "them", "these", "so", "some", "her", "would", "make", "like", "him", "into", "time", "has", "look", "two", "more", "write", "go", "see", "number", "no", "way", "could", "people", "my", "than", "first", "water", "been", "call", "who", "oil", "its", "now", "find", "long", "down", "day", "did", "get", "come", "made", "may", "part"];
         const wordSet = new Set(COMMON_WORDS);
         
         // --- Node Definitions Registry ---
@@ -276,7 +286,8 @@
             'count_occurrences': { name: 'Count Occurrences', group: 'Text Processing', params: [{ name: 'pattern', type: 'text', defaultValue: 'a' }, { name: 'flags', type: 'text', defaultValue: 'g' }], processor: (text, params) => { try { const regex = new RegExp(params.pattern, params.flags); const matches = text.match(regex); return matches ? String(matches.length) : '0'; } catch (e) { return `Invalid Regex: ${e.message}`; } } },
             'substring': { name: 'Substring', group: 'Text Processing', params: [{ name: 'start', type: 'number', defaultValue: 0, min: 0}, { name: 'end', type: 'number', defaultValue: 5, min: 0 }], processor: (text, params) => { return text.slice(params.start, params.end); } },
             'manual_spacing': { name: 'Manual Spacing', group: 'Text Processing', params: [{name: 'indices', type: 'text', defaultValue: '5,10,15'}], processor: (text, params) => { if (!text) return ''; let chars = text.split(''); const indices = params.indices.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)); const modifications = indices.map(num => ({ index: Math.abs(num), action: num >= 0 ? 'add' : 'remove' })).sort((a, b) => b.index - a.index); for (const mod of modifications) { if (mod.action === 'add' && mod.index <= chars.length) { chars.splice(mod.index, 0, ' '); } else if (mod.action === 'remove' && mod.index < chars.length && chars[mod.index] === ' ') { chars.splice(mod.index, 1); } } return chars.join(''); } },
-            
+            'add_spaces': { name: 'Add Spaces (Auto)', group: 'Text Processing', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
+
             // --- Math ---
             'add': { name: 'Add', group: 'Math', hasTwoInputs: true, params: [], processor: (inputs) => { const n1 = parseFloat(inputs.text1); const n2 = parseFloat(inputs.text2); return (isNaN(n1) || isNaN(n2)) ? 'NaN' : String(n1 + n2); } },
             'subtract': { name: 'Subtract', group: 'Math', hasTwoInputs: true, params: [], processor: (inputs) => { const n1 = parseFloat(inputs.text1); const n2 = parseFloat(inputs.text2); return (isNaN(n1) || isNaN(n2)) ? 'NaN' : String(n1 - n2); } },
@@ -302,7 +313,6 @@
             'vigenere': { name: 'Vigenère Cipher', group: 'Ciphers', keyParams: ['key', 'alphabet'], params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'key', type: 'text', defaultValue: 'LEMON' }, { name: 'alphabet', type: 'text', defaultValue: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' }], processor(text, params) { const alphabet = params.alphabet || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; const key = params.key.toUpperCase().replace(new RegExp(`[^${alphabet}]`, 'g'), ''); if (!key) return text; let out = ''; let keyIndex = 0; for (let i = 0; i < text.length; i++) { const char = text[i]; const charUpper = char.toUpperCase(); const charIndex = alphabet.indexOf(charUpper); if (charIndex !== -1) { const keyChar = key[keyIndex % key.length]; const shift = alphabet.indexOf(keyChar); const dir = params.mode === 'Encrypt' ? 1 : -1; const newIndex = (charIndex + (shift * dir) + alphabet.length) % alphabet.length; let newChar = alphabet[newIndex]; if (char === char.toLowerCase()) { newChar = newChar.toLowerCase(); } out += newChar; keyIndex++; } else { out += char; } } return out; } },
             
             // --- Analysis ---
-            'add_spaces': { name: 'Add Spaces (Auto)', group: 'Analysis', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
             'frequency_analysis': { name: 'Frequency Analysis', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); if (!cleanedText) return 'No letters to analyze.'; const counts = {}; const total = cleanedText.length; for (const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } return Object.entries(counts).sort((a,b) => b[1] - a[1]).map(([char, count]) => `${char}: ${((count / total) * 100).toFixed(2)}% (${count})`).join('\n'); }},
             'ioc': { name: 'Index of Coincidence', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N < 2) return 'Not enough text.'; const counts = {}; for(const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } const sum = Object.values(counts).reduce((acc, n) => acc + n * (n-1), 0); const ioc = sum / (N * (N - 1)); return `IoC: ${ioc.toFixed(4)}\n(English is ~0.0667)`; }},
             'chi_squared': { name: 'Chi-Squared', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N === 0) return 'No text to analyze.'; const observed = {}; for (const char of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { observed[char] = 0; } for (const char of cleanedText) { observed[char]++; } let chi2 = 0; for (const char in observed) { const expected = ENGLISH_FREQUENCIES[char] * N; chi2 += Math.pow(observed[char] - expected, 2) / expected; } return `Score: ${chi2.toFixed(2)}\n(Lower is better)`; }},
@@ -455,6 +465,9 @@
             } else if (event.target.type === 'text') {
                 node.params[paramName] = event.target.value;
             }
+
+            if(paramName === 'comment') return;
+            
             processNode(nodeId);
         }
         
@@ -801,7 +814,9 @@
                     createConnection(connData.fromNodeId, connData.toNodeId, connData.portType, connData.keyName);
                 });
                 nodes.forEach(n => {
-                    processNode(n.id)
+                    if (n.type !== 'text-input' && n.type !== 'notes') {
+                        processNode(n.id)
+                    }
                 });
 
             } catch (e) {
