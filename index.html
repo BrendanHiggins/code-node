@@ -124,10 +124,10 @@
         .controls-container select { background-color: var(--node-bg); color: var(--text-light); border: 1px solid var(--border-color); }
         
         .header-buttons { display: flex; align-items: center; gap: 4px; }
-        .delete-node-btn, .refresh-node-btn { background: none; border: none; color: var(--text-dark); cursor: pointer; font-size: 1.1rem; padding: 2px 4px; border-radius: 4px; transition: color 0.2s; }
-        .delete-node-btn:hover, .refresh-node-btn:hover { color: var(--accent-red); }
-        .refresh-node-btn:hover { color: var(--accent-green); }
-        
+        .delete-node-btn, .refresh-node-btn, .duplicate-node-btn { background: none; border: none; color: var(--text-dark); cursor: pointer; font-size: 1.1rem; padding: 2px 4px; border-radius: 4px; transition: color 0.2s; display:flex; align-items:center; justify-content:center; }
+        .delete-node-btn:hover, .refresh-node-btn:hover, .duplicate-node-btn:hover { color: var(--accent-red); }
+        .refresh-node-btn:hover, .duplicate-node-btn:hover { color: var(--accent-green); }
+
         #zoom-controls { position: fixed; bottom: 20px; right: 20px; z-index: 100; display: flex; flex-direction: column; gap: 2px; }
         #zoom-controls button { background-color: var(--node-bg); border: 1px solid var(--border-color); color: var(--text-light); width: 40px; height: 40px; font-size: 24px; font-weight: bold; cursor: pointer; transition: background-color 0.2s, color 0.2s; display: flex; justify-content: center; align-items: center; padding-bottom: 4px; }
         #zoom-controls button:first-child { border-radius: 8px 8px 0 0; }
@@ -190,7 +190,7 @@
                 <div class="options-label-toggle">
                     <label for="snap-to-grid-toggle">Snap to Grid</label>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="snap-to-grid-toggle">
+                        <input type="checkbox" id="snap-to-grid-toggle" checked>
                         <span class="slider"></span>
                     </label>
                 </div>
@@ -240,7 +240,11 @@
         let nodes = [], connections = [], nodeIdCounter = 0, connectionIdCounter = 0;
         let draggingNode = null, isConnecting = false, sourceNodeIdForConnection = null, sourcePortElement = null, tempLine = null;
         let scale = 1, panX = 0, panY = 0, isPanning = false;
-        let settings = { hideModern: true, snapToGrid: false };
+        let settings = { snapToGrid: true };
+        
+        // --- Wordlist for "Add Spaces" Node ---
+        const COMMON_WORDS = ["the", "be", "to", "of", "and", "in", "that", "have", "it", "for", "not", "on", "with", "he", "as", "you", "do", "at", "this", "but", "his", "by", "from", "they", "we", "say", "her", "she", "or", "an", "will", "my", "one", "all", "would", "there", "their", "what", "so", "up", "out", "if", "about", "who", "get", "which", "go", "me", "when", "make", "can", "like", "time", "no", "just", "him", "know", "take", "people", "into", "year", "your", "good", "some", "could", "them", "see", "other", "than", "then", "now", "look", "only", "come", "its", "over", "think", "also", "back", "after", "use", "two", "how", "our", "work", "first", "well", "way", "even", "new", "want", "because", "any", "these", "give", "day", "most", "us"];
+        const wordSet = new Set(COMMON_WORDS);
         
         // --- Node Definitions Registry ---
         const NODE_GROUP_ORDER = ['Input', 'Text Processing', 'Math', 'Encoding', 'Ciphers', 'Analysis'];
@@ -271,6 +275,7 @@
             'get_unique_chars': { name: 'Get Unique Characters', group: 'Text Processing', params: [], processor: (text, params) => { return [...new Set(text.split(''))].join(''); } },
             'count_occurrences': { name: 'Count Occurrences', group: 'Text Processing', params: [{ name: 'pattern', type: 'text', defaultValue: 'a' }, { name: 'flags', type: 'text', defaultValue: 'g' }], processor: (text, params) => { try { const regex = new RegExp(params.pattern, params.flags); const matches = text.match(regex); return matches ? String(matches.length) : '0'; } catch (e) { return `Invalid Regex: ${e.message}`; } } },
             'substring': { name: 'Substring', group: 'Text Processing', params: [{ name: 'start', type: 'number', defaultValue: 0, min: 0}, { name: 'end', type: 'number', defaultValue: 5, min: 0 }], processor: (text, params) => { return text.slice(params.start, params.end); } },
+            'manual_spacing': { name: 'Manual Spacing', group: 'Text Processing', params: [{name: 'indices', type: 'text', defaultValue: '5,10,15'}], processor: (text, params) => { if (!text) return ''; let chars = text.split(''); const indices = params.indices.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)); const modifications = indices.map(num => ({ index: Math.abs(num), action: num >= 0 ? 'add' : 'remove' })).sort((a, b) => b.index - a.index); for (const mod of modifications) { if (mod.action === 'add' && mod.index <= chars.length) { chars.splice(mod.index, 0, ' '); } else if (mod.action === 'remove' && mod.index < chars.length && chars[mod.index] === ' ') { chars.splice(mod.index, 1); } } return chars.join(''); } },
             
             // --- Math ---
             'add': { name: 'Add', group: 'Math', hasTwoInputs: true, params: [], processor: (inputs) => { const n1 = parseFloat(inputs.text1); const n2 = parseFloat(inputs.text2); return (isNaN(n1) || isNaN(n2)) ? 'NaN' : String(n1 + n2); } },
@@ -292,11 +297,12 @@
             'railfence': { name: 'Rail Fence Cipher', group: 'Ciphers', keyParam: 'rails', params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'rails', type: 'number', defaultValue: 3, min: 2, max: 20 }], processor: (text, params) => { const rails = Math.floor(params.rails); if (rails < 2) return text; if (params.mode === 'Encrypt') { const fence = Array(rails).fill(0).map(() => []); let rail = 0, dir = 1; for (const char of text) { fence[rail].push(char); rail += dir; if (rail === 0 || rail === rails - 1) dir *= -1; } return [].concat(...fence).join(''); } else { const len = text.length; const fence = Array(rails).fill(0).map(() => []); const pattern = []; let rail=0, dir=1; for (let i=0; i<len; i++) { pattern.push(rail); rail+=dir; if (rail === 0 || rail === rails-1) dir *= -1; } for (let r=0; r<rails; r++) { for (let i=0; i<len; i++) { if (pattern[i] === r) fence[r].push('X'); } } let i=0; for (let r=0; r<rails; r++) { fence[r] = fence[r].map(() => text[i++]); } let out = ''; rail=0, dir=1; for (let i=0; i<len; i++) { out += fence[rail].shift(); rail+=dir; if (rail === 0 || rail === rails-1) dir *= -1; } return out; } } },
             'rot': { name: 'ROT Cipher', group: 'Ciphers', params: [{ name: 'rotation', type: 'number', defaultValue: 13, min: 0, max: 25 }], processor: (text, params) => { const r = parseInt(params.rotation, 10) % 26; if (r === 0) return text; return text.replace(/[a-zA-Z]/g, c => { const code = c.charCodeAt(0); const start = code <= 90 ? 65 : 97; return String.fromCharCode(((code - start + r) % 26) + start); }); } },
             'route_cipher': { name: 'Route Cipher (Box)', group: 'Ciphers', keyParam: 'cols', params: [{ name: 'cols', type: 'number', defaultValue: 4, min: 2 }, {name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt'}], processor(text, params) { const cols = params.cols; if (cols < 2) return text; if(params.mode === 'Encrypt') { let out = ''; for (let i = 0; i < cols; i++) { for (let j = i; j < text.length; j += cols) { out += text[j]; } } return out; } else { const rows = Math.ceil(text.length / cols); const extra = rows * cols - text.length; const fullCols = cols - extra; let out = ''; let k=0; const grid = Array(rows).fill(0).map(() => Array(cols)); for (let j=0; j<cols; j++) { for (let i=0; i<rows; i++) { if (j >= fullCols && i === rows - 1) continue; grid[i][j] = text[k++]; } } for (let i=0; i<rows; i++) { for (let j=0; j<cols; j++) { if(grid[i][j]) out += grid[i][j]; } } return out; } } },
-            'skip_transposition': { name: 'Skip Transposition', group: 'Ciphers', keyParam: 'skip', params: [{ name: 'skip', type: 'number', defaultValue: 1, min: 0 }], processor: (text, params) => { const skip = Math.max(0, Math.floor(params.skip)); if (!text || skip < 0) return text; let mega_text = text.repeat(skip + 2); let new_string = ""; let i = skip; while(new_string.length < text.length) { if (mega_text[i] === undefined) break; new_string += mega_text[i]; i += (skip + 1); } return new_string; } },
+            'skip_transposition': { name: 'Skip Transposition', group: 'Ciphers', keyParam: 'skip', params: [{ name: 'skip', type: 'number', defaultValue: 1, min: 0 }], processor: (text, params) => { let skip = Math.max(0, Math.floor(params.skip)); if (!text) return ''; let mega_text = text.repeat(skip + 2); let new_string = ""; let i = skip; while(new_string.length < text.length) { if (mega_text[i] === undefined) break; new_string += mega_text[i]; i += (skip + 1); } return new_string; } },
             'substitution': { name: 'Substitution Cipher', group: 'Ciphers', keyParam: 'key', params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'key', type: 'text', defaultValue: 'QWERTYUIOPASDFGHJKLZXCVBNM' }], processor: (text, params) => { const key = params.key.toUpperCase(); if (key.length !== 26 || new Set(key).size !== 26) return "Invalid Key (must be 26 unique letters)"; const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; const fromAbc = params.mode === 'Encrypt' ? abc : key; const toAbc = params.mode === 'Encrypt' ? key : abc; return text.toUpperCase().replace(/[A-Z]/g, c => toAbc[fromAbc.indexOf(c)]); } },
             'vigenere': { name: 'Vigenère Cipher', group: 'Ciphers', keyParams: ['key', 'alphabet'], params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'key', type: 'text', defaultValue: 'LEMON' }, { name: 'alphabet', type: 'text', defaultValue: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' }], processor(text, params) { const alphabet = params.alphabet || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; const key = params.key.toUpperCase().replace(new RegExp(`[^${alphabet}]`, 'g'), ''); if (!key) return text; let out = ''; let keyIndex = 0; for (let i = 0; i < text.length; i++) { const char = text[i]; const charUpper = char.toUpperCase(); const charIndex = alphabet.indexOf(charUpper); if (charIndex !== -1) { const keyChar = key[keyIndex % key.length]; const shift = alphabet.indexOf(keyChar); const dir = params.mode === 'Encrypt' ? 1 : -1; const newIndex = (charIndex + (shift * dir) + alphabet.length) % alphabet.length; let newChar = alphabet[newIndex]; if (char === char.toLowerCase()) { newChar = newChar.toLowerCase(); } out += newChar; keyIndex++; } else { out += char; } } return out; } },
             
             // --- Analysis ---
+            'add_spaces': { name: 'Add Spaces (Auto)', group: 'Analysis', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
             'frequency_analysis': { name: 'Frequency Analysis', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); if (!cleanedText) return 'No letters to analyze.'; const counts = {}; const total = cleanedText.length; for (const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } return Object.entries(counts).sort((a,b) => b[1] - a[1]).map(([char, count]) => `${char}: ${((count / total) * 100).toFixed(2)}% (${count})`).join('\n'); }},
             'ioc': { name: 'Index of Coincidence', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N < 2) return 'Not enough text.'; const counts = {}; for(const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } const sum = Object.values(counts).reduce((acc, n) => acc + n * (n-1), 0); const ioc = sum / (N * (N - 1)); return `IoC: ${ioc.toFixed(4)}\n(English is ~0.0667)`; }},
             'chi_squared': { name: 'Chi-Squared', group: 'Analysis', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N === 0) return 'No text to analyze.'; const observed = {}; for (const char of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { observed[char] = 0; } for (const char of cleanedText) { observed[char]++; } let chi2 = 0; for (const char in observed) { const expected = ENGLISH_FREQUENCIES[char] * N; chi2 += Math.pow(observed[char] - expected, 2) / expected; } return `Score: ${chi2.toFixed(2)}\n(Lower is better)`; }},
@@ -308,13 +314,13 @@
         function applyTransform() { worldContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`; }
 
         // --- Node Functions ---
-        function createNode(x, y, nodeTypeKey) {
+        function createNode(x, y, nodeTypeKey, nodeId = null) {
             const definition = NODE_DEFINITIONS[nodeTypeKey];
             if (!definition) return;
 
-            const nodeId = generateId();
+            const finalNodeId = nodeId || generateId();
             const nodeElement = document.createElement('div');
-            nodeElement.id = nodeId;
+            nodeElement.id = finalNodeId;
             nodeElement.classList.add('node');
             
             nodeElement.style.left = `${x}px`;
@@ -330,7 +336,7 @@
                 currentText = definition.processor("", definition.params.reduce((acc, p) => ({...acc, [p.name]: p.defaultValue }), {}));
             }
 
-            const nodeData = { id: nodeId, x, y, type: nodeTypeKey, text: currentText, inputText: "", inputText2: "", isLoading: false, element: nodeElement, inputs: { text: null, text2: null, key: null, alphabet: null }, outputs: [], params: {} };
+            const nodeData = { id: finalNodeId, x, y, type: nodeTypeKey, text: currentText, inputText: "", inputText2: "", isLoading: false, element: nodeElement, inputs: { text: null, text2: null, key: null, alphabet: null }, outputs: [], params: {} };
             
             let paramsHTML = '';
             if (definition.params && definition.params.length > 0) {
@@ -339,9 +345,9 @@
                     nodeData.params[param.name] = param.defaultValue;
                     let keyPortHTML = '';
                     if (definition.keyParams && definition.keyParams.includes(param.name)) {
-                        keyPortHTML = `<div class="node-port key-port" data-port-type="key" data-key-name="${param.name}" data-node-id="${nodeId}"></div>`;
+                        keyPortHTML = `<div class="node-port key-port" data-port-type="key" data-key-name="${param.name}" data-node-id="${finalNodeId}"></div>`;
                     } else if (definition.keyParam === param.name) { // Legacy single keyParam support
-                         keyPortHTML = `<div class="node-port key-port" data-port-type="key" data-key-name="${param.name}" data-node-id="${nodeId}"></div>`;
+                         keyPortHTML = `<div class="node-port key-port" data-port-type="key" data-key-name="${param.name}" data-node-id="${finalNodeId}"></div>`;
                     }
                     paramsHTML += `<div class="param-row ${keyPortHTML ? 'has-key-port' : ''}" data-param-row="${param.name}">${keyPortHTML}`;
                     const label = param.name.charAt(0).toUpperCase() + param.name.slice(1);
@@ -358,13 +364,14 @@
             }
             
             const refreshButtonHTML = nodeTypeKey === 'random_number' ? `<button class="refresh-node-btn" title="Generate new number">&#x21bb;</button>` : '';
+            const duplicateButtonHTML = `<button class="duplicate-node-btn" title="Duplicate Node">&#128459;</button>`;
 
-            let inputPortsHTML = `<div class="node-port" data-port-type="text" data-node-id="${nodeId}"></div>`;
+            let inputPortsHTML = `<div class="node-port" data-port-type="text" data-node-id="${finalNodeId}"></div>`;
             if (definition.hasTwoInputs) {
-                inputPortsHTML += `<div class="node-port" data-port-type="text2" data-node-id="${nodeId}"></div>`;
+                inputPortsHTML += `<div class="node-port" data-port-type="text2" data-node-id="${finalNodeId}"></div>`;
             }
             
-            let outputPortsHTML = `<div class="node-port" data-port-type="output" data-node-id="${nodeId}"></div>`;
+            let outputPortsHTML = `<div class="node-port" data-port-type="output" data-node-id="${finalNodeId}"></div>`;
             if (nodeTypeKey === 'notes') {
                 inputPortsHTML = '';
                 outputPortsHTML = '';
@@ -372,7 +379,7 @@
 
 
             nodeElement.innerHTML = `
-                <div class="node-header"><span>${definition.name}</span><div class="header-buttons">${refreshButtonHTML}<button class="delete-node-btn" title="Delete Node">&times;</button></div></div>
+                <div class="node-header"><span>${definition.name}</span><div class="header-buttons">${duplicateButtonHTML}${refreshButtonHTML}<button class="delete-node-btn" title="Delete Node">&times;</button></div></div>
                 ${paramsHTML}
                 <textarea class="node-text" ${isReadOnly ? 'readonly' : ''}>${currentText}</textarea>
                 <div class="io-ports-container">
@@ -388,25 +395,42 @@
              textarea.addEventListener('focus', () => nodeElement.removeEventListener('mousedown', onNodeMouseDown));
              textarea.addEventListener('blur', () => nodeElement.addEventListener('mousedown', onNodeMouseDown));
             
-            nodeElement.querySelectorAll('[data-param]').forEach(p_el => { p_el.addEventListener('input', (e) => handleParamChange(e, nodeId)); });
+            nodeElement.querySelectorAll('[data-param]').forEach(p_el => { p_el.addEventListener('input', (e) => handleParamChange(e, finalNodeId)); });
             nodeElement.querySelectorAll('.node-port[data-port-type]').forEach(p => p.addEventListener('mousedown', onPortMouseDown));
-            nodeElement.querySelector('.delete-node-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteNode(nodeId); });
+            nodeElement.querySelector('.delete-node-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteNode(finalNodeId); });
+            nodeElement.querySelector('.duplicate-node-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                const sourceNode = nodes.find(n => n.id === finalNodeId);
+                if (sourceNode) {
+                    const newNode = createNode(sourceNode.x + 20, sourceNode.y + 20, sourceNode.type);
+                    newNode.params = JSON.parse(JSON.stringify(sourceNode.params)); // Deep copy params
+                    Object.entries(newNode.params).forEach(([paramName, value]) => {
+                        const paramEl = newNode.element.querySelector(`[data-param="${paramName}"]`);
+                        if(paramEl) paramEl.value = value;
+                    });
+                    newNode.text = sourceNode.text;
+                    newNode.inputText = sourceNode.inputText;
+                    newNode.inputText2 = sourceNode.inputText2;
+                    newNode.element.querySelector('.node-text').value = sourceNode.text;
+                    processNode(newNode.id);
+                }
+            });
             
             const refreshBtn = nodeElement.querySelector('.refresh-node-btn');
             if(refreshBtn) {
                 refreshBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    processNode(nodeId);
+                    processNode(finalNodeId);
                 });
             }
             
             const resizeObserver = new ResizeObserver(() => {
-                updateConnectionsForNode(nodeId);
+                updateConnectionsForNode(finalNodeId);
             });
             resizeObserver.observe(nodeElement);
             nodeData.resizeObserver = resizeObserver;
 
-             if ((definition.group === 'Input' || definition.group === 'Analysis') && nodeTypeKey !== 'text-input' && nodeTypeKey !== 'notes') {
+             if ((definition.group === 'Input') && nodeTypeKey !== 'text-input' && nodeTypeKey !== 'notes') {
                  nodeElement.querySelector('.input-ports').innerHTML = '';
             }
             if(nodeTypeKey === 'text-input' && !definition.hasTwoInputs) {
@@ -565,7 +589,7 @@
             const fromPort = fromNode.element.querySelector('[data-port-type="output"]');
             
             let toPortQuery = `[data-port-type="${conn.portType}"]`;
-            if (conn.keyName) {
+            if(conn.portType === 'key' && conn.keyName) {
                 toPortQuery = `[data-port-type="key"][data-key-name="${conn.keyName}"]`;
             }
             const toPort = toNode.element.querySelector(toPortQuery);
@@ -745,9 +769,8 @@
                 connectionIdCounter = state.connectionIdCounter || 0;
 
                 state.nodes.forEach(nodeData => {
-                    const newNode = createNode(nodeData.x, nodeData.y, nodeData.type);
-                    newNode.id = nodeData.id; // Override generated ID
-                    newNode.element.id = nodeData.id;
+                    const newNode = createNode(nodeData.x, nodeData.y, nodeData.type, nodeData.id);
+                    
                     if(nodeData.params) newNode.params = nodeData.params;
                     
                     if (nodeData.width && nodeData.height) {
