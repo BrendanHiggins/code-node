@@ -1,2 +1,2 @@
-# 📜 code-nodes
-Code Nodes - A codes/cipher solving tool
+# code-node
+Code Node - A codes/cipher solving tool
