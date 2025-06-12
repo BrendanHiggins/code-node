@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CIPHER NODES</title>
+    <title>CODE NODE</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
@@ -165,6 +165,9 @@
             padding-right: 5px;
             margin-top: 5px;
         }
+        .spacing-controls { display: flex; gap: 4px; }
+        .spacing-controls button { font-size: 1rem; background-color: var(--border-color); color: var(--text-light); width: 24px; height: 24px; border-radius: 4px; display:flex; align-items:center; justify-content:center; }
+        .spacing-controls button:hover { background-color: var(--accent-green); color: var(--bg-dark); }
 
         /* Custom Scrollbars */
         ::-webkit-scrollbar {
@@ -217,7 +220,7 @@
              <div class="options-menu-item">
                  <button id="clear-all-btn">Clear All Nodes</button>
             </div>
-            <p class="version-text">v0.1.1</p>
+            <p class="version-text">Code Node - v0.1.4</p>
         </div>
         <button id="options-btn" title="Options">&#x2699;</button> <!-- Gear Icon -->
         <input type="file" id="load-state-input" style="display: none;" accept=".json">
@@ -273,6 +276,7 @@
             
             // --- Text Processing ---
             'display_text': { name: 'Display Text', group: 'Text Processing', params: [{ name: 'comment', type: 'text', defaultValue: '' }], processor: (text) => text },
+            'get_length': { name: 'Length', group: 'Text Processing', params: [], processor: (text) => String(text.length) },
             'concat': { name: 'Concat', group: 'Text Processing', hasTwoInputs: true, params: [{ name: 'delimiter', type: 'text', defaultValue: '' }], processor: (inputs, params) => { return `${inputs.text1}${params.delimiter}${inputs.text2}`; } },
             'simple_replace': { name: 'Simple Replace', group: 'Text Processing', params: [{ name: 'find', type: 'text', defaultValue: '' }, { name: 'replace', type: 'text', defaultValue: '' }], processor: (text, params) => { if (!params.find) return text; return text.replaceAll(params.find, params.replace); } },
             'case_change': { name: 'Case Change', group: 'Text Processing', params: [{ name: 'mode', type: 'toggle', labels: ['UPPER', 'lower'], defaultValue: 'UPPER' }], processor: (text, params) => { if (params.mode === 'UPPER') return text.toUpperCase(); return text.toLowerCase(); } },
@@ -366,7 +370,12 @@
                     } else if (param.type === 'number') {
                         paramsHTML += `<label>${label}</label><input type="number" class="param-input" style="width: 60px; text-align: center;" data-param="${param.name}" value="${param.defaultValue}" min="${param.min}" max="${param.max}">`;
                     } else if (param.type === 'text') {
-                        paramsHTML += `<label>${label}</label><input type="text" class="param-input" data-param="${param.name}" value="${param.defaultValue}">`;
+                         paramsHTML += `<label>${label}</label><div style="display:flex; align-items:center; width:100%;"><input type="text" class="param-input" data-param="${param.name}" value="${param.defaultValue}">`;
+                         if(nodeTypeKey === 'manual_spacing' && param.name === 'indices') {
+                            paramsHTML += `<div class="spacing-controls"><button data-op="decr">-</button><button data-op="comma">,</button><button data-op="incr">+</button></div>`;
+                         }
+                         paramsHTML += '</div>';
+
                     }
                     paramsHTML += `</div>`;
                 });
@@ -425,6 +434,37 @@
                     processNode(newNode.id);
                 }
             });
+            nodeElement.querySelectorAll('.spacing-controls button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const op = e.currentTarget.dataset.op;
+                    const inputEl = e.currentTarget.closest('.param-row').querySelector('input');
+                    const values = inputEl.value.split(',').map(s => s.trim());
+                    if (op === 'comma') {
+                        inputEl.value += ',';
+                        return;
+                    }
+                    if (values.length > 0) {
+                        let lastPart = values[values.length-1];
+                        if (lastPart === '') { // Ends with a comma
+                            if(values.length > 1) {
+                                const prevNum = parseInt(values[values.length - 2], 10);
+                                if (!isNaN(prevNum)) {
+                                    inputEl.value += (op === 'incr' ? prevNum + 1 : prevNum - 1);
+                                }
+                            }
+                        } else {
+                            let lastNum = parseInt(lastPart, 10);
+                            if (!isNaN(lastNum)) {
+                                lastNum += (op === 'incr' ? 1 : -1);
+                                values[values.length-1] = lastNum;
+                                inputEl.value = values.join(',');
+                            }
+                        }
+                    }
+                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                });
+            });
             
             const refreshBtn = nodeElement.querySelector('.refresh-node-btn');
             if(refreshBtn) {
@@ -440,7 +480,7 @@
             resizeObserver.observe(nodeElement);
             nodeData.resizeObserver = resizeObserver;
 
-             if ((definition.group === 'Input') && nodeTypeKey !== 'text-input' && nodeTypeKey !== 'notes') {
+             if ((definition.group === 'Input' || definition.group === 'Analysis') && nodeTypeKey !== 'text-input' && nodeTypeKey !== 'notes') {
                  nodeElement.querySelector('.input-ports').innerHTML = '';
             }
             if(nodeTypeKey === 'text-input' && !definition.hasTwoInputs) {
