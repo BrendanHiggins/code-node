@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CODE NODE</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Consolas&display=swap');
 
@@ -145,14 +144,11 @@
         .menu-description-text { font-size: 0.75rem; color: var(--text-dark); padding-top: 8px; text-align: left; line-height: 1.4;}
         .menu-description-text a { color: var(--accent-cyan); text-decoration: underline; }
         .menu-description-text a:hover { color: var(--accent-cyan-hover); }
-        #clear-all-btn, #save-state-btn, #load-state-btn, #copy-link-btn { width: 100%; background-color: var(--accent-orange); color: var(--text-light); font-weight: bold; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
+        #clear-all-btn, #save-state-btn, #load-state-btn { width: 100%; background-color: var(--accent-orange); color: var(--text-light); font-weight: bold; padding: 8px 12px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: background-color 0.2s; }
         #clear-all-btn { background-color: var(--accent-orange); color: var(--bg-dark); }
         #clear-all-btn:hover { background-color: var(--accent-orange-hover); }
         #save-state-btn { background-color: var(--accent-green); color: var(--bg-dark); }
         #save-state-btn:hover { background-color: var(--accent-green-hover); }
-        #copy-link-btn { background-color: var(--accent-cyan); color: var(--bg-dark); }
-        #copy-link-btn:hover { background-color: var(--accent-cyan-hover); }
-        #copy-link-btn:disabled { background-color: var(--border-color); color: var(--text-dark); cursor: not-allowed; }
         #load-state-btn { background-color: var(--node-bg); }
         #load-state-btn:hover { background-color: var(--border-color); }
         .options-label-toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; }
@@ -227,12 +223,11 @@
             <div class="options-menu-item">
                  <button id="save-state-btn">Save Current Nodes</button>
                  <button id="load-state-btn">Load Saved Nodes</button>
-                 <button id="copy-link-btn" disabled>Copy Share Link (Disabled)</button>
             </div>
              <div class="options-menu-item">
                  <button id="clear-all-btn">Clear All Nodes</button>
             </div>
-            <p class="version-text">Code Node - v0.2</p>
+            <p class="version-text">Code Node - v0.2.1</p>
         </div>
         <button id="options-btn" title="Options">&#x2699;</button> <!-- Gear Icon -->
         <input type="file" id="load-state-input" style="display: none;" accept=".json">
@@ -271,7 +266,6 @@
         const saveStateButton = document.getElementById('save-state-btn');
         const loadStateButton = document.getElementById('load-state-btn');
         const loadStateInput = document.getElementById('load-state-input');
-        const copyLinkButton = document.getElementById('copy-link-btn');
         const snapToGridToggle = document.getElementById('snap-to-grid-toggle');
         const infoModalOverlay = document.getElementById('info-modal-overlay');
         const modalTitle = document.getElementById('modal-title');
@@ -323,6 +317,7 @@
             'substring': { name: 'Substring', group: 'Text Processing', description: 'Extracts a portion of the text between a start and end index.', params: [{ name: 'start', type: 'number', defaultValue: 0, min: 0}, { name: 'end', type: 'number', defaultValue: 5, min: 0 }], processor: (text, params) => { return text.slice(params.start, params.end); } },
             'manual_spacing': { name: 'Manual Spacing', group: 'Text Processing', description: 'Adds or removes spaces at specific character positions. Use a comma-separated list of numbers. A positive number adds a space; a negative number removes a space at that position.', params: [{name: 'indices', type: 'text', defaultValue: '5,10,15'}], processor: (text, params) => { if (!text) return ''; let chars = text.split(''); const indices = params.indices.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)); const modifications = indices.map(num => ({ index: Math.abs(num), action: num >= 0 ? 'add' : 'remove' })).sort((a, b) => b.index - a.index); for (const mod of modifications) { if (mod.action === 'add' && mod.index <= chars.length) { chars.splice(mod.index, 0, ' '); } else if (mod.action === 'remove' && mod.index < chars.length && chars[mod.index] === ' ') { chars.splice(mod.index, 1); } } return chars.join(''); } },
             'add_spaces': { name: 'Add Spaces (Auto)', group: 'Text Processing', description: 'Attempts to automatically add spaces to unspaced text by identifying the longest possible words from a built-in dictionary.', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
+            'delimited_index_selector': { name: 'Delimited Index Selector', group: 'Text Processing', description: 'Splits text by a delimiter, selects parts based on comma-separated indices, and rejoins them with a new delimiter.', params: [{ name: 'delimiter', type: 'text', defaultValue: ' ' }, { name: 'indices', type: 'text', defaultValue: '0,2,3' }, { name: 'joinWith', type: 'text', defaultValue: '\n' }], processor(text, params) { const { indices, joinWith } = params; let delimiter = params.delimiter; if (!text || delimiter === undefined) return text; if (delimiter === '\\n') { delimiter = '\n'; } const parts = text.split(delimiter); const selectedParts = (indices || '').split(',').map(i => parseInt(i.trim(), 10)).filter(i => !isNaN(i) && i >= 0 && i < parts.length).map(index => parts[index]); return selectedParts.join(joinWith); } },
 
             // --- Math ---
             'add': { name: 'Add', group: 'Math', description: 'Outputs the sum of the two input numbers.', hasTwoInputs: true, params: [], processor: (inputs) => { const n1 = parseFloat(inputs.text1); const n2 = parseFloat(inputs.text2); return (isNaN(n1) || isNaN(n2)) ? 'NaN' : String(n1 + n2); } },
@@ -348,12 +343,8 @@
             'skip_transposition': { name: 'Skip Transposition', group: 'Ciphers', description: 'A transposition cipher where letters are selected from the plaintext at a fixed interval (or "skip"), wrapping around when the end is reached, until all letters are used.', keyParam: 'skip', params: [{ name: 'skip', type: 'number', defaultValue: 1, min: 0 }], processor: (text, params) => { let skip = Math.max(0, Math.floor(params.skip)); if (!text) return ''; let source = text.split(''); let result = []; let pos = 0; while (source.length > 0) { pos = (pos + skip) % source.length; result.push(source.splice(pos, 1)[0]); } return result.join(''); } },
             'substitution': { name: 'Substitution Cipher', group: 'Ciphers', wiki: 'https://en.wikipedia.org/wiki/Substitution_cipher', description: 'A cipher where each letter in the plaintext is replaced by a different letter from a fixed "key" alphabet.', keyParam: 'key', params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'key', type: 'text', defaultValue: 'QWERTYUIOPASDFGHJKLZXCVBNM' }], processor: (text, params) => { const key = params.key.toUpperCase(); if (key.length !== 26 || new Set(key).size !== 26) return "Invalid Key (must be 26 unique letters)"; const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"; const fromAbc = params.mode === 'Encrypt' ? abc : key; const toAbc = params.mode === 'Encrypt' ? key : abc; return text.toUpperCase().replace(/[A-Z]/g, c => toAbc[fromAbc.indexOf(c)]); } },
             'vigenere': { name: 'Vigenère Cipher', group: 'Ciphers', wiki: 'https://en.wikipedia.org/wiki/Vigen%C3%A8re_cipher', description: 'A polyalphabetic substitution cipher that uses a keyword to shift letters by different amounts, making it more robust than a simple Caesar cipher. Can optionally use a custom keyed alphabet.', keyParams: ['key', 'alphabet'], params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }, { name: 'key', type: 'text', defaultValue: 'LEMON' }, { name: 'alphabet', type: 'text', defaultValue: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' }], processor(text, params) { const alphabet = params.alphabet || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; const key = params.key.toUpperCase().replace(new RegExp(`[^${alphabet}]`, 'g'), ''); if (!key) return text; let out = ''; let keyIndex = 0; for (let i = 0; i < text.length; i++) { const char = text[i]; const charUpper = char.toUpperCase(); const charIndex = alphabet.indexOf(charUpper); if (charIndex !== -1) { const keyChar = key[keyIndex % key.length]; const shift = alphabet.indexOf(keyChar); const dir = params.mode === 'Encrypt' ? 1 : -1; const newIndex = (charIndex + (shift * dir) + alphabet.length) % alphabet.length; let newChar = alphabet[newIndex]; if (char === char.toLowerCase()) { newChar = newChar.toLowerCase(); } out += newChar; keyIndex++; } else { out += char; } } return out; } },
-            'one_time_pad': { name: 'One-Time Pad', group: 'Ciphers', wiki: 'https://en.wikipedia.org/wiki/One-time_pad', description: 'A theoretically unbreakable cipher that uses a random key of the same length as the message. Encryption is done via modular arithmetic. This implementation only uses A-Z characters.', hasTwoInputs: true, params: [{ name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt' }], processor: (inputs, params) => { let { text1, text2 } = inputs; text1 = text1.toUpperCase().replace(/[^A-Z]/g, ''); text2 = text2.toUpperCase().replace(/[^A-Z]/g, ''); if (text1.length > text2.length) return "Key must be at least as long as the input text."; let result = ''; const dir = params.mode === 'Encrypt' ? 1 : -1; for(let i=0; i<text1.length; i++) { const p = text1.charCodeAt(i) - 65; const k = text2.charCodeAt(i) - 65; result += String.fromCharCode(((p + k * dir + 26) % 26) + 65); } return result; } },
-            'adfgx': { name: 'ADFGX Cipher', group: 'Ciphers', wiki: 'https://en.wikipedia.org/wiki/ADFGX_cipher', description: 'A WWI German cipher combining a 5x5 Polybius square (using letters ADFGX) with columnar transposition.', keyParams: ['key_square', 'key_transpose'], params: [ {name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt'}, {name: 'key_square', type: 'text', defaultValue: 'PHQGIUMEAYNOFDXKRCVSZWB'}, {name: 'key_transpose', type: 'text', defaultValue: 'GERMAN'} ], processor(text, params) { /* TODO */ return "Not Implemented Yet"; } },
-            'adfgvx': { name: 'ADFGVX Cipher', group: 'Ciphers', wiki: 'https://en.wikipedia.org/wiki/ADFGVX_cipher', description: 'A WWI German cipher combining a 6x6 Polybius square (using letters ADFGVX) with columnar transposition.', keyParams: ['key_square', 'key_transpose'], params: [ {name: 'mode', type: 'toggle', labels: ['Encrypt', 'Decrypt'], defaultValue: 'Encrypt'}, {name: 'key_square', type: 'text', defaultValue: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'}, {name: 'key_transpose', type: 'text', defaultValue: 'PRIVACY'} ], processor(text, params) { /* TODO */ return "Not Implemented Yet"; } },
-
+            
             // --- Analysis ---
-            'add_spaces': { name: 'Add Spaces (Auto)', group: 'Analysis', description: 'Attempts to automatically add spaces to unspaced text by identifying the longest possible words from a built-in dictionary.', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
             'frequency_analysis': { name: 'Frequency Analysis', group: 'Analysis', wiki: 'https://en.wikipedia.org/wiki/Frequency_analysis', description: 'Counts the occurrences of each letter in the text and displays it as a percentage. This is a fundamental tool for classical cryptanalysis.', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); if (!cleanedText) return 'No letters to analyze.'; const counts = {}; const total = cleanedText.length; for (const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } return Object.entries(counts).sort((a,b) => b[1] - a[1]).map(([char, count]) => `${char}: ${((count / total) * 100).toFixed(2)}% (${count})`).join('\n'); }},
             'ioc': { name: 'Index of Coincidence', group: 'Analysis', wiki: 'https://en.wikipedia.org/wiki/Index_of_coincidence', description: 'Measures the relative frequency of letters in a ciphertext. A high IoC (like English, ~0.067) suggests a monoalphabetic cipher, while a low IoC (~0.038) suggests a polyalphabetic or random text.', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N < 2) return 'Not enough text.'; const counts = {}; for(const char of cleanedText) { counts[char] = (counts[char] || 0) + 1; } const sum = Object.values(counts).reduce((acc, n) => acc + n * (n-1), 0); const ioc = sum / (N * (N - 1)); return `IoC: ${ioc.toFixed(4)}\n(English is ~0.0667)`; }},
             'chi_squared': { name: 'Chi-Squared', group: 'Analysis', wiki: 'https://en.wikipedia.org/wiki/Chi-squared_test', description: 'Compares the letter frequency of the input text to standard English letter frequencies. A lower score indicates a closer match to natural English text.', params: [], processor: (text) => { const cleanedText = text.toUpperCase().replace(/[^A-Z]/g, ''); const N = cleanedText.length; if (N === 0) return 'No text to analyze.'; const observed = {}; for (const char of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') { observed[char] = 0; } for (const char of cleanedText) { observed[char]++; } let chi2 = 0; for (const char in observed) { const expected = ENGLISH_FREQUENCIES[char] * N; chi2 += Math.pow(observed[char] - expected, 2) / expected; } return `Score: ${chi2.toFixed(2)}\n(Lower is better)`; }},
@@ -924,34 +915,6 @@
             optionsMenu.classList.remove('show');
         }
 
-        function copyShareLink() {
-            const jsonString = saveState();
-            const compressed = pako.deflate(jsonString, { to: 'string' });
-            const encoded = btoa(compressed).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-            const url = `${window.location.origin}${window.location.pathname}#state=${encoded}`;
-            navigator.clipboard.writeText(url).then(() => {
-                const originalText = copyLinkButton.innerText;
-                copyLinkButton.innerText = 'Link Copied!';
-                setTimeout(() => { copyLinkButton.innerText = originalText; }, 2000);
-            });
-            optionsMenu.classList.remove('show');
-        }
-
-        function loadStateFromUrl() {
-            if (window.location.hash.startsWith('#state=')) {
-                const encoded = window.location.hash.substring(7);
-                try {
-                    const decoded = atob(encoded.replace(/-/g, '+').replace(/_/g, '/'));
-                    const jsonString = pako.inflate(decoded, { to: 'string' });
-                    loadState(jsonString);
-                    window.location.hash = ''; // Clear hash after loading
-                } catch(e) {
-                    console.error("Failed to load state from URL", e);
-                    alert("Could not load shared state from URL. It may be invalid.");
-                }
-            }
-        }
-
         function showInfoModal(nodeTypeKey) {
             const definition = NODE_DEFINITIONS[nodeTypeKey];
             if (!definition) return;
@@ -1001,7 +964,6 @@
         });
         
         saveStateButton.addEventListener('click', saveStateToFile);
-        // copyLinkButton.addEventListener('click', copyShareLink); // Disabled for now
         loadStateButton.addEventListener('click', () => loadStateInput.click());
         loadStateInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -1018,7 +980,6 @@
         infoModalOverlay.addEventListener('click', (e) => { if(e.target === infoModalOverlay) infoModalOverlay.classList.remove('show'); });
         
         function init() {
-            loadStateFromUrl(); // Check for URL state first
             if (nodes.length === 0) { // If no state loaded from URL, start fresh
                  populateDropdown();
                  createNode(25, 100, 'text-input');
