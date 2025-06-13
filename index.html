@@ -227,7 +227,7 @@
              <div class="options-menu-item">
                  <button id="clear-all-btn">Clear All Nodes</button>
             </div>
-            <p class="version-text">Code Node - v0.2.1</p>
+            <p class="version-text">Code Node - v0.3.0</p>
         </div>
         <button id="options-btn" title="Options">&#x2699;</button> <!-- Gear Icon -->
         <input type="file" id="load-state-input" style="display: none;" accept=".json">
@@ -318,6 +318,8 @@
             'manual_spacing': { name: 'Manual Spacing', group: 'Text Processing', description: 'Adds or removes spaces at specific character positions. Use a comma-separated list of numbers. A positive number adds a space; a negative number removes a space at that position.', params: [{name: 'indices', type: 'text', defaultValue: '5,10,15'}], processor: (text, params) => { if (!text) return ''; let chars = text.split(''); const indices = params.indices.split(',').map(n => parseInt(n.trim(), 10)).filter(n => !isNaN(n)); const modifications = indices.map(num => ({ index: Math.abs(num), action: num >= 0 ? 'add' : 'remove' })).sort((a, b) => b.index - a.index); for (const mod of modifications) { if (mod.action === 'add' && mod.index <= chars.length) { chars.splice(mod.index, 0, ' '); } else if (mod.action === 'remove' && mod.index < chars.length && chars[mod.index] === ' ') { chars.splice(mod.index, 1); } } return chars.join(''); } },
             'add_spaces': { name: 'Add Spaces (Auto)', group: 'Text Processing', description: 'Attempts to automatically add spaces to unspaced text by identifying the longest possible words from a built-in dictionary.', params: [], processor: (text) => { if (!text) return ''; text = text.toLowerCase().replace(/[^a-z]/g, ''); let result = []; let i = 0; let unknown_buffer = ''; while (i < text.length) { let bestMatch = ''; for (let j = Math.min(i + 20, text.length); j > i; j--) { const sub = text.substring(i, j); if (wordSet.has(sub)) { bestMatch = sub; break; } } if (bestMatch) { if (unknown_buffer) { result.push(unknown_buffer); unknown_buffer = ''; } result.push(bestMatch); i += bestMatch.length; } else { unknown_buffer += text[i]; i++; } } if (unknown_buffer) { result.push(unknown_buffer); } return result.join(' '); }},
             'delimited_index_selector': { name: 'Delimited Index Selector', group: 'Text Processing', description: 'Splits text by a delimiter, selects parts based on comma-separated indices, and rejoins them with a new delimiter.', params: [{ name: 'delimiter', type: 'text', defaultValue: ' ' }, { name: 'indices', type: 'text', defaultValue: '0,2,3' }, { name: 'joinWith', type: 'text', defaultValue: '\n' }], processor(text, params) { const { indices, joinWith } = params; let delimiter = params.delimiter; if (!text || delimiter === undefined) return text; if (delimiter === '\\n') { delimiter = '\n'; } const parts = text.split(delimiter); const selectedParts = (indices || '').split(',').map(i => parseInt(i.trim(), 10)).filter(i => !isNaN(i) && i >= 0 && i < parts.length).map(index => parts[index]); return selectedParts.join(joinWith); } },
+            'delimited_nth_selector': { name: 'Delimited Nth Selector', group: 'Text Processing', description: 'Splits text by a delimiter, selects every Nth part, and rejoins them.', params: [{ name: 'delimiter', type: 'text', defaultValue: ' ' }, { name: 'n', type: 'number', defaultValue: 3, min: 1 }, { name: 'joinWith', type: 'text', defaultValue: ' ' }], processor(text, params) { const { n, joinWith } = params; let delimiter = params.delimiter; const step = Math.max(1, Math.floor(n)); if (!text || delimiter === undefined) return text; if (delimiter === '\\n') { delimiter = '\n'; } const parts = text.split(delimiter); const selected = parts.filter((_, i) => (i + 1) % step === 0); return selected.join(joinWith); } },
+            'get_nth_character': { name: 'Get Nth Character', group: 'Text Processing', description: 'Selects every Nth character from the input text.', params: [{ name: 'n', type: 'number', defaultValue: 5, min: 1 }, { name: 'joinWith', type: 'text', defaultValue: '' }], processor(text, params) { const { n, joinWith } = params; const step = Math.max(1, Math.floor(n)); if (!text) return ''; let result = []; for (let i = step - 1; i < text.length; i += step) { result.push(text[i]); } return result.join(joinWith); } },
 
             // --- Math ---
             'add': { name: 'Add', group: 'Math', description: 'Outputs the sum of the two input numbers.', hasTwoInputs: true, params: [], processor: (inputs) => { const n1 = parseFloat(inputs.text1); const n2 = parseFloat(inputs.text2); return (isNaN(n1) || isNaN(n2)) ? 'NaN' : String(n1 + n2); } },
@@ -458,12 +460,15 @@
                     newNode.params = JSON.parse(JSON.stringify(sourceNode.params)); // Deep copy params
                     Object.entries(newNode.params).forEach(([paramName, value]) => {
                         const paramEl = newNode.element.querySelector(`[data-param="${paramName}"]`);
-                        if(paramEl) paramEl.value = value;
+                        if(paramEl) {
+                             if (paramEl.type === 'checkbox') {
+                                const paramDef = NODE_DEFINITIONS[newNode.type].params.find(p=>p.name===paramName);
+                                paramEl.checked = value === paramDef.labels[1];
+                             } else {
+                                paramEl.value = value;
+                             }
+                        }
                     });
-                    newNode.text = sourceNode.text;
-                    newNode.inputText = sourceNode.inputText;
-                    newNode.inputText2 = sourceNode.inputText2;
-                    newNode.element.querySelector('.node-text').value = sourceNode.text;
                     processNode(newNode.id);
                 }
             });
